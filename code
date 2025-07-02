@@ -1,0 +1,47 @@
+import cv2
+import serial
+import time
+
+# === USB Serial Setup (change if needed) ===
+serial_port = '/dev/ttyACM0'
+ser = serial.Serial(serial_port, 115200, timeout=1)
+time.sleep(2)  # Wait for Micro:bit to reset
+
+# === Load MobileNet SSD ===
+net = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'mobilenet_iter_73000.caffemodel')
+cap = cv2.VideoCapture(0)  # 0 = default camera
+
+print("🧠 AI Person Detection Running...")
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("❌ Camera error")
+        break
+
+    # Prepare image blob for detection
+    blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0,
+                                 (300, 300), (104.0, 177.0, 123.0))
+
+    net.setInput(blob)
+    detections = net.forward()
+
+    count = 0
+    for i in range(detections.shape[2]):
+        confidence = detections[0, 0, i, 2]
+        class_id = int(detections[0, 0, i, 1])
+        if confidence > 0.6 and class_id == 15:  # Class 15 = person
+            count += 1
+
+    print("🎃 People Detected:", count)
+
+    # Send count to Micro:bit
+    try:
+        ser.write((str(count) + "\n").encode())
+    except:
+        print("⚠️ Micro:bit not connected!")
+
+    time.sleep(2)  # Delay between scans
+
+cap.release()
+ser.close()
